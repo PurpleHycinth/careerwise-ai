@@ -14,13 +14,27 @@ import torch
 from datetime import datetime
 
 # -----------------------
-# MongoDB client (optional)
+# Config: Mongo + Cloud URL
 # -----------------------
-# Configure via env vars; defaults are safe for local dev.
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
 MONGO_DB = os.environ.get("MONGO_DB", "careerwise")
 MONGO_COLLECTION = os.environ.get("MONGO_COLLECTION", "analyses")
 
+# Base public URL where uploaded files will be available in production.
+# Example: https://cdn.yourdomain.com/uploads
+# If empty, cloud_path fields will be empty strings.
+CLOUD_BASE_URL = os.environ.get("CLOUD_BASE_URL", "").rstrip("/")
+
+def make_cloud_path(file_id: str) -> str:
+    if not CLOUD_BASE_URL:
+        return ""
+    # Ensure file_id does not start with slash
+    file_id = file_id.lstrip("/")
+    return f"{CLOUD_BASE_URL}/{file_id}"
+
+# -----------------------
+# MongoDB client (optional)
+# -----------------------
 try:
     from pymongo import MongoClient
     mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
@@ -40,7 +54,6 @@ except Exception as e:
 # -----------------------
 # Model: load your fine-tuned model here
 # -----------------------
-# Adjust model path/name as needed
 ml_model = SentenceTransformer("fine-tuned-all-MiniLM-L6-v2-12")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -166,20 +179,27 @@ def skill_keyword_suggestions(jd_text: str, resume_text: str, top_n: int = 12) -
     return {"skills_candidate": skills, "present": present, "missing": missing}
 
 # -----------------------
-# Your existing FastAPI helpers (preserved) with minimal meta-file addition
+# FastAPI helpers (preserved) with meta-file addition
 # -----------------------
 class AnalysisRequest(BaseModel):
     job_description: str
     file_ids: List[str]
 
+
+# --- Career finder request model (add to model.py) ---
+
+
+class CareerRequest(BaseModel):
+    job_description: str
+    file_ids: Optional[List[str]] = None
+
+
 def delete_file_after_delay(filepath: Path, delay: int):
     time.sleep(delay)
     try:
-        # delete the file
         os.remove(filepath)
     except OSError as e:
         print(f"Error deleting file {filepath}: {e}")
-    # also delete metadata file if present
     meta_path = filepath.with_suffix(filepath.suffix + ".meta.json")
     if meta_path.exists():
         try:
@@ -194,7 +214,8 @@ async def save_and_schedule_deletion(
 ):
     """
     Saves uploaded files under upload_dir as <uuid><ext> and writes a <uuid><ext>.meta.json
-    containing the original filename. Returns the list of saved file ids (strings) as before.
+    containing the original filename and the cloud URL (if configured). Returns the list
+    of saved file ids (strings).
     """
     file_ids = []
     for resume_file in resumes:
@@ -204,8 +225,10 @@ async def save_and_schedule_deletion(
         # write file bytes
         with open(filepath, "wb") as buffer:
             buffer.write(await resume_file.read())
-        # write associated metadata file containing original filename
-        meta = {"original_filename": resume_file.filename}
+        # build cloud path (string) - might be empty in dev if CLOUD_BASE_URL not set
+        cloud_path = make_cloud_path(f"{unique_id}{extension}")
+        # write associated metadata file containing original filename and cloud path
+        meta = {"original_filename": resume_file.filename, "cloud_path": cloud_path}
         meta_path = filepath.with_suffix(filepath.suffix + ".meta.json")
         try:
             with open(meta_path, "w", encoding="utf-8") as mf:
@@ -218,8 +241,7 @@ async def save_and_schedule_deletion(
     return file_ids
 
 # -----------------------
-# Merged analyze_files: computes score + explainability + returns original filename
-#   -> also inserts a top-level document into MongoDB containing the analysis run (if available)
+# analyze_files: computes score + explainability + returns original filename + local/cloud paths
 # -----------------------
 def analyze_files(request: AnalysisRequest, upload_dir: Path):
     """
@@ -231,7 +253,7 @@ def analyze_files(request: AnalysisRequest, upload_dir: Path):
       - compute matches between resume sentences and JD sentences
       - compute skill keyword suggestions (missing skills)
     Returns list sorted by score desc with detailed diagnostics, each item includes:
-      { file_id, original_filename, score, raw_score, ... }
+      { file_id, original_filename, local_path, cloud_path, score, raw_score, ... }
     Additionally, saves a document for this analysis run into MongoDB (if connected).
     """
     jd_text = request.job_description or ""
@@ -242,22 +264,31 @@ def analyze_files(request: AnalysisRequest, upload_dir: Path):
     jd_sentences = split_sentences_simple(jd_text)
 
     results = []
+    file_urls_map = {}  # for saving into mongo doc (file_id -> cloud_path)
     for file_id in request.file_ids:
         filepath = upload_dir / file_id
         if not filepath.exists():
             # skip missing file
             continue
 
-        # Try to read original filename from meta file
+        # Try to read original filename and cloud_path from meta file
         original_filename = None
+        cloud_path_meta = ""
         meta_path = filepath.with_suffix(filepath.suffix + ".meta.json")
         if meta_path.exists():
             try:
                 with open(meta_path, "r", encoding="utf-8") as mf:
                     meta = json.load(mf)
                 original_filename = meta.get("original_filename")
+                cloud_path_meta = meta.get("cloud_path", "")
             except Exception as e:
                 print(f"Warning: failed to read meta for {filepath}: {e}")
+
+        # absolute local path string
+        try:
+            local_path_str = str(filepath.resolve())
+        except Exception:
+            local_path_str = str(filepath)
 
         text = ""
         try:
@@ -307,9 +338,14 @@ def analyze_files(request: AnalysisRequest, upload_dir: Path):
         for miss in skills["missing"][:5]:
             suggested_edits.append(f"Consider including a short bullet mentioning '{miss}' (where applicable), e.g. 'Worked with {miss} on ...'")
 
+        cloud_path = cloud_path_meta or make_cloud_path(file_id)
+        file_urls_map[file_id] = cloud_path
+
         results.append({
-            "file_id": file_id,  # stored id
-            "original_filename": original_filename or file_id,  # original name if available, otherwise same as id
+            "file_id": file_id,
+            "original_filename": original_filename or file_id,
+            "local_path": local_path_str,
+            "cloud_path": cloud_path,
             "score": overall_score,
             "raw_score": round(raw_score, 4),
             "top_resume_sentences": sent_scores.get("top_k", []),
@@ -320,27 +356,24 @@ def analyze_files(request: AnalysisRequest, upload_dir: Path):
             "suggested_edits": suggested_edits
         })
 
-    # Sort by score descending to preserve original behaviour
+    # Sort by score descending
     results_sorted = sorted(results, key=lambda x: x["score"], reverse=True)
 
-    # -----------------------
     # Persist the analysis run to MongoDB (if available)
-    # -----------------------
     if _mongo_available:
         try:
             analysis_doc = {
                 "job_description": jd_text,
                 "file_ids": request.file_ids,
                 "results": results_sorted,
+                "file_urls": file_urls_map,
                 "created_at": datetime.utcnow(),
                 "meta": {
                     "num_files": len(results_sorted),
                 }
             }
             insert_result = mongo_col.insert_one(analysis_doc)
-            # store inserted id in the doc for traceability
             analysis_doc["_id"] = str(insert_result.inserted_id)
-            # Optionally log the insertion id
             print(f"[mongo] analysis stored with _id={analysis_doc['_id']}")
         except Exception as e:
             print(f"[mongo] failed to insert analysis doc: {e}")

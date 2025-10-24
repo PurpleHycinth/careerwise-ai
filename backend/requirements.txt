@@ -1,7 +1,19 @@
+# --- FastAPI core ---
 fastapi
 uvicorn[standard]
-python-dotenv
-sentence-transformers
-PyPDF2
-python-docx
 python-multipart
+python-dotenv
+
+# --- Resume parsing / NLP ---
+PyMuPDF            # for PDF reading (import fitz)
+python-docx        # for DOCX reading
+PyPDF2             # keep existing for backup PDF parsing
+nltk               # for tokenization + stopwords
+requests           # for external API calls (Jooble or others)
+
+# --- Embeddings / AI ---
+sentence-transformers
+torch              # required by sentence-transformers
+
+# --- Optional extras for stable deployment ---
+pydantic           # usually auto-installed with FastAPI

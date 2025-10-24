@@ -51,7 +51,7 @@ export default function App() {
           </div>
 
           <div className="hero-visual">
-            <div className="illus">[Illustration]</div>
+            <img src="./checker.png" alt="check" style={{"maxHeight":"400px",maxWidth:"500px"}}/>
           </div>
         </section>
 
@@ -87,7 +87,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        © {new Date().getFullYear()} Careerwise AI — Built by Dhruv Kulshrestha
+        © {new Date().getFullYear()} Careerwise AI — Built by CompileSqaud
       </footer>
     </div>
   )

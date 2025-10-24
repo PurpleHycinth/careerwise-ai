@@ -5,9 +5,9 @@ export default function Header({ onTryClick }) {
   return (
     <header className="topbar">
       <div className="brand">Careerwise AI</div>
-      <nav>
+      {/* <nav>
         <button className="try-btn" onClick={onTryClick}>Try</button>
-      </nav>
+      </nav> */}
     </header>
   )
 }
