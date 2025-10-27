@@ -1,0 +1,46 @@
+{
+  "base_eval": {
+    "pair_metrics": {
+      "pearson_r": 0.5294482377442127,
+      "pearson_p": 1.3880015638755263e-17,
+      "spearman_r": 0.5406897789518972,
+      "spearman_p": 2.0937176868053275e-18,
+      "mse": 0.06418772320836466,
+      "mae": 0.21539012795048101,
+      "r2": 0.14069284959901152
+    },
+    "ranking_metrics": {
+      "MRR": 1.0,
+      "NDCG@1": 0.681792830507429,
+      "NDCG@3": 0.7760082173338283,
+      "NDCG@5": 0.7498847941188909
+    },
+    "plots": {
+      "scatter": "fine-tuned-all-MiniLM-L6-v2-8\\base_model_scatter_labels_vs_preds.png",
+      "residuals": "fine-tuned-all-MiniLM-L6-v2-8\\base_model_residuals_hist.png"
+    },
+    "n_examples": 224
+  },
+  "fine_tuned_eval": {
+    "pair_metrics": {
+      "pearson_r": 0.7337635810347504,
+      "pearson_p": 3.9231621695237166e-39,
+      "spearman_r": 0.7258960311756416,
+      "spearman_p": 6.065983493271789e-38,
+      "mse": 0.07189521408000177,
+      "mae": 0.22205965114491327,
+      "r2": 0.037509535304651065
+    },
+    "ranking_metrics": {
+      "MRR": 1.0,
+      "NDCG@1": 1.0,
+      "NDCG@3": 1.0,
+      "NDCG@5": 0.9231418450454834
+    },
+    "plots": {
+      "scatter": "fine-tuned-all-MiniLM-L6-v2-8\\fine_tuned_scatter_labels_vs_preds.png",
+      "residuals": "fine-tuned-all-MiniLM-L6-v2-8\\fine_tuned_residuals_hist.png"
+    },
+    "n_examples": 224
+  }
+}
