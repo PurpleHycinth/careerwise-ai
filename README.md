@@ -1,6 +1,4 @@
-Here’s a clean and **well-structured README.md** format for your **CareerWise-AI Backend** project:
 
-````markdown
 # CareerWise-AI Backend  
 
 The **CareerWise-AI Backend** is a high-performance API built with **FastAPI** that provides intelligent resume analysis and scoring based on semantic similarity with job descriptions.  
