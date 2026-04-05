@@ -1,19 +1,27 @@
 # --- FastAPI core ---
-fastapi
-uvicorn[standard]
-python-multipart
-python-dotenv
+fastapi==0.135.3
+uvicorn[standard]==0.43.0
+python-multipart==0.0.22
+python-dotenv==1.2.2
 
 # --- Resume parsing / NLP ---
-PyMuPDF            # for PDF reading (import fitz)
-python-docx        # for DOCX reading
-PyPDF2             # keep existing for backup PDF parsing
-nltk               # for tokenization + stopwords
-requests           # for external API calls (Jooble or others)
+PyMuPDF==1.27.2
+python-docx==1.2.0
+PyPDF2==3.0.1
+nltk==3.9.4
+requests==2.32.5
+
+# --- LangChain + Gemini ---
+langchain==0.2.16
+langchain-core==0.2.43
+langchain-community==0.2.16
+langchain-google-genai==1.0.10
+google-genai==0.5.0
+langgraph==0.2.55
 
 # --- Embeddings / AI ---
-sentence-transformers
-torch              # required by sentence-transformers
+sentence-transformers==2.7.0
+torch==2.2.2
 
-# --- Optional extras for stable deployment ---
-pydantic           # usually auto-installed with FastAPI
+# --- Stability ---
+pydantic==2.12.5

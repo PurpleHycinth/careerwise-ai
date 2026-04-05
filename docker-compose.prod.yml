@@ -1,0 +1,31 @@
+# version: "3.9"
+
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    expose:
+      - "8000"             # internal only — nginx proxies to it
+    env_file:
+      - ./backend/app/.env
+    environment:
+      # Only nginx needs access; no browser CORS needed since same-origin
+      ALLOWED_ORIGINS: "http://localhost"
+    volumes:
+      - resume_uploads:/app/uploads
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  resume_uploads:

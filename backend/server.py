@@ -1,23 +1,12 @@
-# server.py or main.py
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from app import create_app
 
-app = create_app()  # your existing factory
+app = create_app()  # CORS is handled inside create_app() via ALLOWED_ORIGINS env var
 
-# ✅ Add this CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ],  # frontend dev server URLs
-    allow_credentials=True,
-    allow_methods=["*"],  # allow POST, GET, OPTIONS, etc.
-    allow_headers=["*"],  # allow all custom headers
-)
-
-# ✅ Start server correctly for FastAPI
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",   # was 127.0.0.1 — that blocks Docker from reaching it
+        port=8000,
+        reload=True
+    )
