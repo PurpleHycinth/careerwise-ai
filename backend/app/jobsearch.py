@@ -6,8 +6,6 @@ import fitz  # PyMuPDF
 from docx import Document
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
-import nltk
-import warnings
 warnings.filterwarnings("ignore")
 def _ensure_nltk_data():
     import nltk
