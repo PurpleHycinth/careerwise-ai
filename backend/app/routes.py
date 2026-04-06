@@ -1,19 +1,17 @@
+# backend/app/routes.py
 import os
-from typing import List,Optional
+from typing import List, Optional
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, BackgroundTasks,HTTPException, Form
-from .model import AnalysisRequest, save_and_schedule_deletion, analyze_files
-# new imports for career finder (put near top of routes.py)
+from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException, Form
+from .model import AnalysisRequest, save_and_schedule_deletion, analyze_files, delete_file_after_delay
 import uuid
-import json
 from fastapi.encoders import jsonable_encoder
-
-# CareerRequest model we just added
 from .model import CareerRequest
 
 router = APIRouter()
 UPLOADS_DIR = Path(__file__).resolve().parent.parent / "uploads"
 os.makedirs(UPLOADS_DIR, exist_ok=True)
+
 
 @router.post("/upload/")
 async def upload_resumes(
@@ -23,69 +21,92 @@ async def upload_resumes(
     file_ids = await save_and_schedule_deletion(resumes, background_tasks, UPLOADS_DIR)
     return {"file_ids": file_ids}
 
+
 @router.post("/analyze/")
 async def analyze_resumes(request: AnalysisRequest):
     ranked_results = analyze_files(request, UPLOADS_DIR)
     return {"ranked_resumes": ranked_results}
 
 
-# ----------------- CAREER-FINDER ENDPOINTS -----------------
-# Ensure UPLOADS_DIR exists (already defined above)
-# Attempt flexible import of your jobsearch module (jobsearch.py)
+# ----------------- CAREER-FINDER SETUP -----------------
+# jobsearch.py is a LangGraph pipeline — build it once at startup.
 try:
-    from .jobsearch import parse_resume_custom, generate_llm_advice, fetch_job_listings
-except Exception:
-    try:
-        from jobsearch import parse_resume_custom, generate_llm_advice, fetch_job_listings
-    except Exception:
-        parse_resume_custom = generate_llm_advice = fetch_job_listings = None
+    from .jobsearch import build_graph, CareerState
+    _career_pipeline = build_graph()
+    _career_available = True
+except Exception as e:
+    _career_pipeline = None
+    _career_available = False
+    print(f"[career] Failed to load jobsearch pipeline: {e}")
+
+
+def _run_pipeline(resume_path: str, goal: str) -> dict:
+    """Invoke the compiled LangGraph pipeline and return the final state."""
+    initial_state: CareerState = {
+        "resume_path": resume_path,
+        "goal": goal,
+        "resume": None,
+        "advice": None,
+        "universities": None,
+        "jobs": None,
+        "errors": [],
+    }
+    return _career_pipeline.invoke(initial_state)
+
+
+def _state_to_response(state: dict, filename: str) -> dict:
+    """
+    Map the LangGraph final state to the shape CareerFinder.jsx expects:
+      { filename, parsed, advice: { course_suggestions, university_suggestions,
+        job_suggestions, career_paths, skill_gaps, advice_summary }, external_jobs }
+    """
+    resume    = state.get("resume") or {}
+    advice    = state.get("advice") or {}
+    unis      = state.get("universities") or []   # enriched by fetch_universities_node
+    jobs      = state.get("jobs") or []           # live listings from fetch_jobs_node
+
+    normalized_advice = {
+        "career_paths":           advice.get("career_paths", []),
+        "course_suggestions":     advice.get("course_suggestions", []),
+        "university_suggestions": unis,           # already enriched with website URLs
+        "job_suggestions":        advice.get("career_paths", []),  # career_paths doubles as job roles
+        "job_search_keywords":    advice.get("job_search_keywords", []),
+        "skill_gaps":             advice.get("skill_gaps", []),
+        "advice_summary":         advice.get("advice_summary", ""),
+    }
+
+    return {
+        "filename":      filename,
+        "parsed":        resume,
+        "advice":        normalized_advice,
+        "external_jobs": jobs,
+    }
+
+
+# ----------------- CAREER-FINDER ENDPOINTS -----------------
 
 @router.post("/career/analyze/")
-async def career_analyze(request: CareerRequest, jooble_key: Optional[str] = None):
+async def career_analyze(request: CareerRequest):
     """
-    Expects JSON:
-      { "job_description": "...", "file_ids": ["<uuid>.pdf", ...] }
-    Uses already-uploaded files (from your /upload/ endpoint).
+    Runs the career pipeline for each already-uploaded file_id.
+    Expects JSON: { "job_description": "...", "file_ids": ["<uuid>.pdf", ...] }
     """
-    # Ensure jobsearch functions available
-    if parse_resume_custom is None or generate_llm_advice is None:
-        raise HTTPException(
-            status_code=500,
-            detail="Career module not importable. Place jobsearch.py at project root or ensure package imports."
-        )
+    if not _career_available:
+        raise HTTPException(status_code=500, detail="Career pipeline unavailable — check jobsearch imports.")
 
-    parsed_resumes = []
+    results = []
     for fid in request.file_ids or []:
         file_path = UPLOADS_DIR / fid
         if not file_path.exists():
-            parsed_resumes.append({"filename": fid, "error": "file not found"})
+            results.append({"filename": fid, "error": "file not found"})
             continue
         try:
-            parsed = parse_resume_custom(str(file_path))
-            parsed_resumes.append({"filename": fid, "parsed": parsed})
+            state = _run_pipeline(str(file_path), request.job_description)
+            results.append(_state_to_response(state, fid))
         except Exception as e:
-            parsed_resumes.append({"filename": fid, "error": f"parse failed: {str(e)}"})
+            results.append({"filename": fid, "error": str(e)})
 
-    parsed_for_advice = parsed_resumes[0]["parsed"] if parsed_resumes and "parsed" in parsed_resumes[0] else {}
-
-    try:
-        advice = generate_llm_advice(parsed_for_advice, request.job_description)
-    except Exception as e:
-        advice = {"error": f"generate_llm_advice failed: {str(e)}"}
-
-    external_jobs = []
-    # fetch_job_listings in jobsearch.py will return [] if api_key missing
-    if jooble_key and fetch_job_listings is not None:
-        try:
-            external_jobs = fetch_job_listings(request.job_description, api_key=jooble_key)
-        except Exception as e:
-            external_jobs = [{"error": f"fetch_job_listings failed: {str(e)}"}]
-
-    return jsonable_encoder({
-        "parsed_resumes": parsed_resumes,
-        "advice": advice,
-        "external_jobs": external_jobs
-    })
+    return jsonable_encoder({"results": results})
 
 
 @router.post("/career/upload_and_analyze/")
@@ -93,25 +114,18 @@ async def career_upload_and_analyze(
     background_tasks: BackgroundTasks,
     resume: UploadFile = File(...),
     goal: str = Form(...),
-    jooble_key: Optional[str] = Form(None)
 ):
     """
-    Convenience multipart endpoint:
-      - upload one resume file + 'goal' string
-      - returns parsed resume, advice, optional external jobs
+    Multipart endpoint: upload one resume + career goal string.
+    Returns parsed resume, AI advice, enriched universities, and live job listings.
     """
-    if parse_resume_custom is None or generate_llm_advice is None:
-        raise HTTPException(
-            status_code=500,
-            detail="Career module not importable. Place jobsearch.py at project root or ensure package imports."
-        )
+    if not _career_available:
+        raise HTTPException(status_code=500, detail="Career pipeline unavailable — check jobsearch imports.")
 
-    # validate extension
     ext = Path(resume.filename).suffix.lower()
     if ext not in {".pdf", ".docx"}:
         raise HTTPException(status_code=400, detail="Unsupported file type. Accepts .pdf and .docx")
 
-    # save file (same pattern as your upload helper)
     unique_name = f"{uuid.uuid4().hex}{ext}"
     saved_path = UPLOADS_DIR / unique_name
     try:
@@ -121,29 +135,14 @@ async def career_upload_and_analyze(
         await resume.close()
 
     try:
-        parsed = parse_resume_custom(str(saved_path))
-        advice = generate_llm_advice(parsed, goal)
+        state = _run_pipeline(str(saved_path), goal)
     except Exception as e:
         try:
             saved_path.unlink()
         except Exception:
             pass
-        raise HTTPException(status_code=500, detail=f"Parsing or advice generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Career pipeline failed: {str(e)}")
 
-    external_jobs = []
-    if jooble_key and fetch_job_listings is not None:
-        try:
-            external_jobs = fetch_job_listings(goal, api_key=jooble_key)
-        except Exception as e:
-            external_jobs = [{"error": f"fetch_job_listings failed: {str(e)}"}]
+    background_tasks.add_task(delete_file_after_delay, saved_path, 600)
 
-    # optional: schedule deletion using your existing background_tasks helper
-    background_tasks.add_task(save_and_schedule_deletion, [], background_tasks, [resume])
-
-
-    return jsonable_encoder({
-        "filename": unique_name,
-        "parsed": parsed,
-        "advice": advice,
-        "external_jobs": external_jobs
-    })
+    return jsonable_encoder(_state_to_response(state, unique_name))

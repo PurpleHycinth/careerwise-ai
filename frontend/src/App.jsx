@@ -1,16 +1,21 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+// frontend/src/App.jsx
+import React, { useState } from 'react'
+import Header from './components/Header'
+import ToggleSwitch from './components/ToggleSwitch'
+import ResumeRanking from './components/resume/ResumeRanking'
+import CareerFinder from './components/career/CareerFinder'
+import './App.css'
 
-export default defineConfig({
-  plugins: [
-    react({
-      include: '**/*.{jsx,js}',  // ← tell Vite to treat .js as JSX too
-    })
-  ],
-  server: {
-    proxy: {
-      '/upload': 'http://127.0.0.1:8000',
-      '/analyze': 'http://127.0.0.1:8000'
-    }
-  }
-})
+export default function App() {
+  const [mode, setMode] = useState('resume')
+
+  return (
+    <div className="app">
+      <Header />
+      <main className="main-content">
+        <ToggleSwitch mode={mode} setMode={setMode} />
+        {mode === 'resume' ? <ResumeRanking /> : <CareerFinder />}
+      </main>
+    </div>
+  )
+}
