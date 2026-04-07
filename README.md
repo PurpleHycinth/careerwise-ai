@@ -1,4 +1,13 @@
 
+---
+title: CareerWise AI
+emoji: 🎯
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 8000
+pinned: false
+
 # CareerWise-AI Backend  
 
 The **CareerWise-AI Backend** is a high-performance API built with **FastAPI** that provides intelligent resume analysis and scoring based on semantic similarity with job descriptions.  
@@ -139,3 +148,6 @@ Frontend setup and integration instructions will be added soon.
 ---
 
 
+
+git remote add space https://huggingface.co/spaces/SWARALI12/careerwise-ai
+git remote add space https://huggingface.co/spaces/ruslanmv/Milvus-Client-Embedding

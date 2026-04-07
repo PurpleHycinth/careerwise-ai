@@ -1,5 +1,4 @@
-# version: "3.9"
-
+# docker-compose.prod.yml
 services:
 
   backend:
@@ -7,12 +6,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     expose:
-      - "8000"             # internal only — nginx proxies to it
+      - "8000"
     env_file:
       - ./backend/app/.env
     environment:
-      # Only nginx needs access; no browser CORS needed since same-origin
-      ALLOWED_ORIGINS: "http://localhost"
+      # Set this to your actual public domain, e.g. https://careerwise.example.com
+      ALLOWED_ORIGINS: "${PUBLIC_ORIGIN:-http://localhost}"
     volumes:
       - resume_uploads:/app/uploads
     restart: unless-stopped
