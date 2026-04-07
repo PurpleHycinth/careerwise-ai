@@ -1,0 +1,8 @@
+backend/fine-tuned-all-MiniLM-L6-v2/
+backend/fine-tuned-all-MiniLM-L6-v2-8/
+backend/fine-tuned-all-MiniLM-L6-v2-12/
+
+# Model checkpoints (loaded from HF Hub)
+backend/fine-tuned-all-MiniLM-L6-v2/
+backend/fine-tuned-all-MiniLM-L6-v2-8/
+backend/fine-tuned-all-MiniLM-L6-v2-12/
