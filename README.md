@@ -1,3 +1,4 @@
+
 ---
 title: CareerWise AI
 emoji: 🎯
@@ -6,7 +7,6 @@ colorTo: indigo
 sdk: docker
 app_port: 8000
 pinned: false
----
 
 # CareerWise-AI Backend  
 
