@@ -146,8 +146,3 @@ key: resumes (File)
 Frontend setup and integration instructions will be added soon.
 
 ---
-
-
-
-git remote add space https://huggingface.co/spaces/SWARALI12/careerwise-ai
-git remote add space https://huggingface.co/spaces/ruslanmv/Milvus-Client-Embedding
